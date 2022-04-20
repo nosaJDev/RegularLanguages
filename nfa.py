@@ -341,6 +341,21 @@ def kleene_NFA(nfa1:NFA):
     
     # The nfa is complete
     return new_nfa
+
+def base_NFA(string:str):
+    # This will create a base nfa that only accepts a single string
     
-    
+    # Initialize the NFA
+    new_nfa = NFA()
+
+    # Add the target state
+    t_state = new_nfa.add_state(True)
+
+    # Add the single edge
+    new_nfa.add_edge(0,1,string)
+
+    # Return the newly created nfa
+    return new_nfa
+
+
     
