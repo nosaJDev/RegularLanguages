@@ -20,6 +20,17 @@ class NFA:
             0:[]
         }
         
+    def print_info(self):
+        # Prints the whole of the nfa
+        print("States:",self.num_states)
+        print("Start-state:", self.start_state)
+        print("End-states:",self.target_states)
+        
+        for elist in self.edges:
+            print(str(elist)+":",end=' ')
+            print(self.edges[elist])
+            
+        
     def add_state(self,target=False):
         # This will add a state to the NFA and return its number
         self.num_states += 1
@@ -153,8 +164,8 @@ class NFA:
             
             # Mark it and find all the legit visitors
             for e in self.edges[state_at]:
-                if e[0] == '':
-                    tovisit.append(e[2])
+                if e[1] == '':
+                    tovisit.append(e[0])
         
         # After you finish, return all that were marked
         return marked
@@ -179,6 +190,8 @@ class NFA:
             # For all the states you found, try the instant_state and add the result to the end states
             for s in access_states:
                 result.update(self.instant_states(s))
+        
+        return result
                 
     def extract_dfa(self):
         
@@ -190,7 +203,9 @@ class NFA:
         
         # The following function will turn state sets into tupples that are hashable
         def tuple_from_states(states):
-            return tuple(list(states).sort())
+            ls = list(states)
+            ls.sort()
+            return tuple(ls)
         
         # Then I need to create a dictionary with all the new states
         # The dictionary will contain tupples with old states
@@ -213,6 +228,8 @@ class NFA:
             # Check if you have seen this one already
             if state_at in visited:
                 continue
+
+            visited.add(state_at)
             
             # Add it to the dictionary
             dfa_states[state_at] = {}
@@ -221,10 +238,10 @@ class NFA:
             for char in alphabet:
                 
                 # Find the state for this character
-                next_state = tuple_from_states(set(state_at),char)
-                
+                next_state = tuple_from_states(self.char_states(set(state_at),char))
+
                 # Add it to the pending and to the dictionary
-                dfa_states[char] = next_state
+                dfa_states[state_at][char] = next_state
                 pending.append(next_state)
 
         # After you finish, create a mapping between the states and numbers
@@ -252,7 +269,7 @@ class NFA:
         
         # Finally, make the targets state correct
         for state in dfa_states:
-            for s in state:
+            for s in state:                
                 if s in self.target_states:
                     mydfa.set_state_target(mapping[state],True)
                     
@@ -349,7 +366,7 @@ def base_NFA(string:str):
     new_nfa = NFA()
 
     # Add the target state
-    t_state = new_nfa.add_state(True)
+    new_nfa.add_state(True)
 
     # Add the single edge
     new_nfa.add_edge(0,1,string)
