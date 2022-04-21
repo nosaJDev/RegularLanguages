@@ -9,17 +9,27 @@ class DFA:
         
         # The alphabet that is used
         # The alphabet is a list of the different characters that can constitute an input
-        self.alphabet = alphab
+        self.alphabet = list(alphab)
+        self.alphabet.sort()
         
         # States are numbered
         self.num_states = 1
         self.start_state = 0
         self.target_states = set()
+        self.dead_states = set() # These are found separately
+        self.target_distance = {} # The distance each state has from a target state
         
         # Edges are a dictionary of states, corresponding to a filled dictionary of the alphabet
         # that has the value of the next state
         # If one or more of the dictionaries is not yet filled, the DFA is invalid
         self.edges = {0:{}}
+        
+        # Extra variables to calculate the next string on set
+        self.next_len = 0
+        self.next_in = 0
+        self.depth_list = []
+        self.backtracked = False
+        self.ab_next = { self.alphabet[i]:self.alphabet[i+1] for i in range(len(self.alphabet)-1)}
     
     def print_info(self):
         # Prints info on the DFA
@@ -84,6 +94,64 @@ class DFA:
             self.target_states.add(state)
         else:
             self.target_states.discard(state)
+    
+    def compute_dead_states(self):
+        # This is run once and it speeds up other procedures
+        
+        def check_state_dead(state):
+            # This checks if a single state is dead
+            visited = set()
+            pending = [state]
+            
+            # Start from this state and do a breath-first till you find a target state
+            while True:
+                
+                if len(pending) == 0:
+                    break
+                
+                # Get the next state
+                state_at = pending.pop()
+                
+                # Check that it is not yet visited
+                if state_at in visited:
+                    continue
+                visited.add(state_at)
+                
+                if state_at in self.target_states:
+                    return False
+
+                # Add the other states
+                for char in self.edges[state_at]:
+                    pending.append(self.edges[state_at][char])
+            
+            return True
+        
+        for i in range(self.num_states):
+            if check_state_dead(i):
+                self.dead_states.add(i)
+                
+        # After you compute the dead states, you can compute the distance from each state
+        for i in self.dead_states:
+            self.target_distance[i] = 999999999999
+        for i in self.target_states:
+            self.target_distance[i] = 0
+        
+        
+        
+        for i in range(self.num_states):
+            visited = set()
+            visited.update(self.dead_states)
+            visited.update(self.target_states)
+            for s in range(self.num_states):
+                if s in visited:
+                    continue
+                found = False
+                self.target_distance[s] = 999999999999999
+                for s2 in self.edges[s].values():
+                    if s2 in self.target_distance:
+                        found = True
+                        if s not in self.target_distance or self.target_distance[s2]+1<self.target_distance[s]:
+                            self.target_distance[s] = self.target_distance[s2]+1
             
     def check_string(self,string):
         # Checks if a string is accepted in the language
@@ -98,36 +166,126 @@ class DFA:
         # Check if you are at a target state
         return state_at in self.target_states
     
-    def find_all_till(self, length):
+    def get_next_string(self, reset = False):
         # This function will find all the strings till specified length that are accepted by the automaton
         # Careful because it is slow as fuck
         
-        # First initiate a dictionary for what goes where
-        state_sets = {i:set() for i in range(self.num_states)}
-        state_sets[0].add('')
+        # depth list contains (state, char_at)
+        # state is the state you are in
+        # char_at is the character you will be searching next
         
-        final_set = set()
+        if reset:
+            self.next_len = 0
+            self.next_in = 0
+            self.depth_list = []
+            self.backtracked = False
+        if self.depth_list == []:
+            self.next_in = 1
+            self.depth_list.append((0,self.alphabet[0]))
+        
+        # Special case for the null string
+        if self.next_len == 0:
+            self.next_len = 1
+            if 0 in self.target_states:
+                return '<null>'
+        
+        # The next found string
+        result = ""
+        
+        # Dive into the tree till you are next_in = next_len
+        while True:
+            
+            if len(self.depth_list) == 0:
+                self.depth_list.append((0,self.alphabet[0]))
+                self.next_len += 1
+                self.next_in = 1
+                self.backtracked = False
+                continue
+            
+            # Get the frame you are in
+            frame = self.depth_list[-1]
+            
+            # If you backtracked get the next character
+            if self.backtracked:
+                self.next_in -= 1
+                if frame[1] not in self.ab_next:
+                    # Backtrack further
+                    self.depth_list.pop()
+                    continue
+                else:
+                    # Skip to the next character
+                    self.depth_list[-1] = (frame[0],self.ab_next[frame[1]])
+                    self.backtracked = False
+                    frame = self.depth_list[-1]
+            
+            # If you are not at the correct level ascend forward
+            if self.next_len > self.next_in:
+                
+                # Check if you are hopeless first
+                if self.target_distance[frame[0]] > self.next_len-self.next_in+1:
+                    self.backtracked = True
+                    self.depth_list.pop()
+                    continue
+                
+                # Don't forward to a dead state
+                all_dead = False
+                while self.target_distance[self.edges[frame[0]][frame[1]]] > self.next_len-self.next_in:
+                    if frame[1] in self.ab_next:
+                        frame = (frame[0],self.ab_next[frame[1]])
+                        break
+                    else:
+                        all_dead = True
+                        break
+                
+                # If all else states are dead, you need to backtrack
+                if all_dead:
+                    self.backtracked = True
+                    self.depth_list.pop()
+                    continue
+                
+                # If some state is not dead, just visit it forward
+                self.depth_list[-1] = frame
+                self.next_in += 1
+                self.depth_list.append((self.edges[frame[0]][frame[1]],self.alphabet[0]))
+                continue
+            
+            # There you are at the correct level, start checking where they all lead
+            # Till you find one that leads to a target state
+            found = False
+            while True:
+                if self.edges[frame[0]][frame[1]] in self.target_states:
+                    found = True
+                    break
+                elif frame[1] in self.ab_next:
+                    frame = (frame[0],self.ab_next[frame[1]])
+                else:
+                    # You have consumed everything and found nothing
+                    break
+            
+            # If you didn't find it, you need to backtrack
+            if not found:
+                self.backtracked = True
+                self.depth_list.pop()
+                continue
+            else:
+                # You found it, so update the table
+                self.depth_list[-1] = (frame[0],frame[1])
+                
+                # Construct the string
+                for el in self.depth_list:
+                    result += el[1]
+                
+                # Try to go the next character
+                if frame[1] not in self.ab_next:
+                    # You need to backtrack
+                    self.backtracked = True
+                    self.depth_list.pop()
+                    return result
+                else:
+                    self.depth_list[-1] = (frame[0],self.ab_next[frame[1]])
+                    return result
         
         
-        # Loop till desired length
-        for i in range(length):
-            
-            
-            for ts in self.target_states:
-                final_set.update(state_sets[ts])
-            
-            state_sets_old = state_sets.copy()
-            
-            # Loop for every state
-            for s in range(self.num_states):
-                if len(state_sets[s]) != 0:
-                    # Loop for every edge and organise states by characters
-                    for char in self.edges[s]:
-                        ns = self.edges[s][char]
-                        state_sets[ns].update({char+x for x in state_sets_old[s]})
-        
-        return final_set
-    
     def generate(self,num_chars):
         # This is a function that will randomly generate a string that has exactly n characters
         # and is accepted by the automaton

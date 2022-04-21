@@ -247,23 +247,25 @@ def main():
     dfa = nfa.extract_dfa()
     #dfa.print_info()
     
-    # Get the alphabet
-    alphabet = list(dfa.get_alphabet())
-    alphabet.sort()
-
-    # Start with the null string and see how many can you find
-    string = ""
-    still = 10
-    while len(string) < 10:
-        if dfa.check_string(string):
-            print(string,end=", ")
-            still -= 1
-            if still == 0:
-                if len(input())>0:
-                    break
-                still = 10
-        string = next_string(string,alphabet)
     
+    
+    dfa.compute_dead_states()
+    first = True
+    at = 10
+    printed = set()
+    while True:
+        
+        printed.add(dfa.get_next_string(first))
+        first = False
+        at -= 1
+        if at == 0:
+            at = 10
+            printed = list(printed)
+            printed.sort()
+            print(printed)
+            printed = set()
+            if len(input()) > 0:
+                break
 
 
 if __name__ == "__main__":
