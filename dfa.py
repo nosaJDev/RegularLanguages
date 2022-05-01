@@ -1,7 +1,7 @@
 
 import random
 import math
-from nfa import NFA
+from nfa import NFA, kleene_NFA, base_NFA
 
 class DFA:
     # This is a representation of a DFA
@@ -321,8 +321,32 @@ class DFA:
                 else:
                     self.depth_list[-1] = (frame[0],self.ab_next[frame[1]])
                     return result
-        
-        
+
+    def extract_nfa(self):
+        # Creates and extracts the nfa from this dfa
+        # Quite simpler than the other way around
+
+        # Create the new NFA
+        new_nfa = NFA()
+
+        # Add the appropriate states
+        for i in range(self.num_states-1):
+            new_nfa.add_state()
+
+        # Add the appropriate edges
+        for state in range(self.num_states):
+            # Search it's edges
+            for char in self.edges[state]:
+                # Add each one to the nfa
+                new_nfa.add_edge(state,self.edges[state][char],char)
+
+        # Finally determine which are target
+        for ts in self.target_states:
+            new_nfa.set_state_target(ts,True)
+
+        # And after all this, return the nfa
+        return new_nfa
+
     def generate(self,num_chars):
         # This is a function that will randomly generate a string that has exactly n characters
         # and is accepted by the automaton
@@ -492,3 +516,11 @@ def combine_DFA(dfa1:DFA,dfa2:DFA,mode):
 
     # Finally, return the new dfa
     return new_dfa
+
+def kleenee_DFA(dfa1:DFA):
+    # Produces the kleene star of the given dfa
+    return kleene_NFA(dfa1.extract_nfa()).extract_dfa()
+
+def base_DFA(string:str):
+    # Makes a dfa that recognises a specific string
+    return base_NFA(string).extract_dfa()

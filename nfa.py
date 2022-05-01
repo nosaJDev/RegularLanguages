@@ -29,8 +29,7 @@ class NFA:
         for elist in self.edges:
             print(str(elist)+":",end=' ')
             print(self.edges[elist])
-            
-        
+                
     def add_state(self,target=False):
         # This will add a state to the NFA and return its number
         self.num_states += 1
@@ -73,13 +72,11 @@ class NFA:
 
         return edges_offset
             
-    
     def reset_edges(self):
         # This will drop all the edges of the automaton
         self.edges = {}
         for i in range(self.num_states):
             self.edges[i] = []
-    
     
     def add_edge(self, ss, se, string):
         # This will add an edge to the automaton
@@ -90,8 +87,7 @@ class NFA:
             return
         
         self.edges[ss].append((se,string))
-        
-        
+          
     def simplify(self):
         # This will break up rules that consist of more than one characters
         # It will produce states as it goes
