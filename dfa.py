@@ -1,6 +1,7 @@
 
 import random
 import math
+from nfa import NFA
 
 class DFA:
     # This is a representation of a DFA
@@ -113,6 +114,12 @@ class DFA:
         else:
             self.target_states.discard(state)
     
+    def negate(self):
+        # Makes all the target states non-target, and all the non-target states target
+        # Basically negates the dfa
+        for i in range(self.num_states):
+            self.set_state_target(i,i not in self.target_states)
+
     def compute_dead_states(self):
         # This is run once and it speeds up other procedures
         
