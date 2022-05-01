@@ -16,6 +16,11 @@ class DFA:
         self.num_states = 1
         self.start_state = 0
         self.target_states = set()
+
+        # These are extra calculations that should be done once after every change
+        # So we include some booleans so that the calcuation is not repeated again by mistake
+        self.computed_dead_states = False
+        self.computed_target_distance = False
         self.dead_states = set() # These are found separately
         self.target_distance = {} # The distance each state has from a target state
         
@@ -51,6 +56,11 @@ class DFA:
         return self.alphabet
     
     def add_state(self, target = False):
+
+        # Reset the computations
+        self.computed_dead_states = False
+        self.computed_target_distance = False
+
         # Adds a new state to the DFA
         new_state = self.num_states
         self.num_states += 1
@@ -69,6 +79,10 @@ class DFA:
         # Adds a new edge to the state
         # If it exists, it will replace it
         
+        # Reset the computations
+        self.computed_dead_states = False
+        self.computed_target_distance = False
+
         # Check that the states are valid
         if ss >= self.num_states or se >= self.num_states:
             print("Tried to add an edge between non-existent states")
@@ -84,6 +98,10 @@ class DFA:
     def set_state_target(self,state, target):
         # Sets the target status of a state
         
+        # Reset the computations
+        self.computed_dead_states = False
+        self.computed_target_distance = False
+
         # Check that it's a vaild state
         if state >= self.num_states:
             print("Tried to alter invalid state")
@@ -98,6 +116,10 @@ class DFA:
     def compute_dead_states(self):
         # This is run once and it speeds up other procedures
         
+        # Check if you have done this before
+        if self.computed_dead_states:
+            return
+
         def check_state_dead(state):
             # This checks if a single state is dead
             visited = set()
@@ -136,8 +158,6 @@ class DFA:
         for i in self.target_states:
             self.target_distance[i] = 0
         
-        
-        
         for i in range(self.num_states):
             visited = set()
             visited.update(self.dead_states)
@@ -152,6 +172,10 @@ class DFA:
                         found = True
                         if s not in self.target_distance or self.target_distance[s2]+1<self.target_distance[s]:
                             self.target_distance[s] = self.target_distance[s2]+1
+
+        # Completed the computations
+        self.computed_dead_states = True
+        self.computed_target_distance = True
             
     def check_string(self,string):
         # Checks if a string is accepted in the language
@@ -174,6 +198,11 @@ class DFA:
         # state is the state you are in
         # char_at is the character you will be searching next
         
+        # First of all, you have to have computed the dead states for this to work reliably
+        if not self.computed_dead_states:
+            self.compute_dead_states()
+
+        # If you wish to reset, you must clear all the helper variables
         if reset:
             self.next_len = 0
             self.next_in = 0
@@ -194,6 +223,7 @@ class DFA:
         
         # Dive into the tree till you are next_in = next_len
         while True:
+            #print(self.depth_list)
             
             if len(self.depth_list) == 0:
                 self.depth_list.append((0,self.alphabet[0]))
@@ -289,6 +319,7 @@ class DFA:
     def generate(self,num_chars):
         # This is a function that will randomly generate a string that has exactly n characters
         # and is accepted by the automaton
+        # It is also close to obsolete, may redo in the future
         
         # This will hold info on where this is visited from
         # It holds info in the form of (state_from, char_at)
@@ -365,6 +396,92 @@ class DFA:
             # Do the step
             string = char+string
             state_at = prev_state
-            chars_need -= 1          
+            chars_need -= 1
         
         return string
+
+
+def combine_DFA(dfa1:DFA,dfa2:DFA,mode):
+    # Combines two dfa's to create combinations
+    # Mode determines which states are considered final in the combination
+    # Different mode values produce &, |, - and other useful functions
+    
+    # DFA's must have the same alphabet
+    if dfa1.alphabet != dfa2.alphabet:
+        print("Tried to combine dfa's with different alphabet")
+        return
+    alphabet = dfa1.alphabet.copy()
+
+    # Create a list for the new states, and for the pending ones
+    new_states = []
+    pending = []
+    
+    # Create dictionary for the new state edges
+    new_state_edges = {}
+
+    # Create the first state and add it to the pending
+    pending.append((0,0))
+
+    # Do the loop to produce the new dfa
+    while True:
+
+        # Check if you are done
+        if len(pending) == 0:
+            break
+
+        # Get the next pending state
+        state_at = pending.pop()
+        if state_at in new_state_edges:
+            continue
+
+        # Add the state to the list and to the edges dictionary
+        new_states.append(state_at)
+        new_state_edges[state_at] = {}
+
+        # Find all the edges of that state
+        for char in alphabet:
+
+            # Find the new state for the character
+            state_next = (dfa1.edges[state_at[0][char]],dfa2.edges[state_at[1]][char])
+
+            # Add it to the pending states
+            pending.append(state_next)
+
+            # Fill in the specific edge
+            new_state_edges[state_at][char] = state_next
+
+    # After that's done you have all the new states for the new dfa,
+    # in an arbitrary order in new_states (but the start state is always the first one)
+    # and you also have all the edges, so create the new dfa
+    new_dfa = DFA(alphabet)
+
+    # Add as many states as you need (the first one is already present)
+    for i in range(len(new_states)-1):
+        new_dfa.add_state()
+    
+    # Create a dictionary to enumerate the various states
+    state_map = { s:i for i,s in enumerate(new_states)}
+
+    # Fill in all the edges
+    for state in new_states:
+        # Find the state representation
+        ds = state_map[state]
+        # Fill in the edges for that one
+        for char in new_state_edges[state]:
+            # Find the corresponding representation
+            cs = state_map[new_state_edges[state][char]]
+            # Add the new edge to your new dfa
+            new_dfa.add_edge(ds,cs,char)
+
+    # Finally, according to the mode, map which states are final, and which are not
+    # We do that by mapping the right function
+    is_target = {
+        '|': lambda x : x[0] in dfa1.target_states or x[1] in dfa2.target_states,
+        '&': lambda x : x[0] in dfa1.target_states and x[1] in dfa2.target_states,
+        '-': lambda x : x[0] in dfa1.target_states and x[1] not in dfa2.target_states,
+    }[mode]
+    for i in range(new_dfa.num_states):
+        new_dfa.set_state_target(i,is_target(new_states[i]))
+
+    # Finally, return the new dfa
+    return new_dfa

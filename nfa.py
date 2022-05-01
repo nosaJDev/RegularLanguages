@@ -159,7 +159,7 @@ class NFA:
             # Take a pending state and check that it's not yet marked
             state_at = tovisit.pop()
             if state_at in marked:
-                break
+                continue
             marked.add(state_at)
             
             # Mark it and find all the legit visitors
@@ -213,6 +213,7 @@ class NFA:
         
         # I need to process all the states in that list
         start_state = tuple_from_states(self.instant_states(self.start_state))
+        print(start_state,'s')
         pending = [start_state]
         visited = set() # This will mark those that are already processed
         
@@ -263,6 +264,7 @@ class NFA:
 
         # Add all the edges that you found
         for state in dfa_states:
+            print(state)
             d_state = mapping[state]
             for char in dfa_states[state]:
                 mydfa.add_edge(d_state,mapping[dfa_states[state][char]],char)

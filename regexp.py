@@ -193,7 +193,13 @@ class RegexpParser:
                     # Not a special character
                     expr = base_NFA(self.char_at[-1])
             else:
-                expr = base_NFA(self.char_at)
+
+                # Special case for null character
+                if self.char_at == '_':
+                    expr = NFA()
+                    expr.set_state_target(0,True)
+                else:
+                    expr = base_NFA(self.char_at)
             self.consume_char()
             
         
@@ -251,22 +257,9 @@ def main():
     
     dfa.compute_dead_states()
     first = True
-    at = 10
-    printed = set()
-    while True:
-        
-        printed.add(dfa.get_next_string(first))
-        first = False
-        at -= 1
-        if at == 0:
-            at = 10
-            printed = list(printed)
-            printed.sort()
-            print(printed)
-            printed = set()
-            if len(input()) > 0:
-                break
-
+    while len(input()) == 0:
+        for i in range(1):
+            print(dfa.get_next_string(False), end = ', ')
 
 if __name__ == "__main__":
     main()
