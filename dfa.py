@@ -638,8 +638,112 @@ def kleene_DFA(dfa1:DFA):
     return kleene_NFA(dfa1.extract_nfa()).extract_dfa()
 
 def base_DFA(string:str, alphabet):
+
     # Makes a dfa that recognises a specific string
     res =  base_NFA(string).extract_dfa()
     res.alphabet = alphabet
     res.make_complete()
     return res
+
+# Purpose specific DFA's
+
+def modulo_DFA(number):
+    # Creates a DFA that accepts digits and will compute the modulo
+    # to the given number. It won't have target states, because it's
+    # meant to be customizable
+
+    # First, create the DFA with the digit alphabet
+    new_dfa = DFA([str(i) for i in range(10)])
+
+    # Then add as many states as the modulo needs
+    for i in range(number-1):
+        new_dfa.add_state()
+
+    # Then for every state, add all the possible combinations by computing the modulo
+    for i in range(number):
+        for j in range(10):
+            # Create the string from the digit
+            char = str(j)
+
+            # Find the modulo in regards of the i and j
+            next_state = (i*10+j)%number
+
+            # Add the edge
+            new_dfa.add_edge(i,next_state,char)
+
+    # Finally, return the DFA
+    return new_dfa
+
+def digify_DFA(dfa:DFA):
+    # This is a proof of concept function that given an one alphabet dfa,
+    # produces a dfa that accepts numbers that are the acceptable string
+    # lengths of the first one
+
+    # First, check that the given DFA is one alphabet
+    if len(dfa.alphabet) != 1:
+        raise Exception("Tried to difigy dfa with polysymbolic alphabet")
+
+    # We need to organize the states and find the circle
+    char = dfa.alphabet[0]
+    circle_at = -1 # Where in order is the circle
+    target_status = [0 in dfa.target_states] # If each state has a target
+    mapping = {0:0} # A map between the state_number to its order
+
+    # Start the journey into the dfa
+    state_at = 0
+    order_at = 0
+    while True:
+        # Visit the next state in order
+        order_at += 1
+        state_at, tar = dfa.find_state(state_at,char)
+
+        # Check if you have visited the state before, and you are done
+        if state_at in mapping:
+            # Find the circle point
+            circle_at = mapping[state_at]
+            break
+        else:
+            mapping[state_at] = order_at
+            target_status.append(tar)
+    
+    # Check how big is the circle
+    many = len(target_status)
+    circle_size = many-circle_at
+    line_size = many-circle_size
+    print(many,circle_size,line_size,dfa.num_states)
+
+    # Create a modulo dfa of such size, and set the appropriate targets
+    mod_dfa = modulo_DFA(circle_size)
+    for i in range(circle_size):
+        mod_dfa.set_state_target(i,target_status[circle_at+((i+circle_size-line_size)%circle_size)])
+    
+    # Hack it so that it only accepts non-trash numbers
+    from regexp import RegexpParser
+    parser = RegexpParser()
+    mod_dfa = combine_DFA(mod_dfa,parser.parse_string("(\\1\\0*)|0"),'&')
+
+
+    # Exclude the numbers outside the circle that are not targets
+    non_targets = [i for i in range(line_size) if not target_status[i]]
+    thestr = "\\0*&("
+    for t in non_targets:
+        thestr += str(t)+"|"
+    print(thestr,'1')
+    if len(thestr) != 5:
+        mod_dfa = combine_DFA(mod_dfa,parser.parse_string(thestr[:-1]+")"),"-")
+
+    # Include numbers that are targets
+    targets = [i for i in range(line_size) if target_status[i]]
+    thestr = "\\0*&("
+    print(thestr,'2')
+    for t in targets:
+        thestr += str(t)+"|"
+    if len(thestr) != 5:
+        mod_dfa = combine_DFA(mod_dfa,parser.parse_string(thestr[:-1]+")"),"|")
+    
+    # Return the newly created dfa
+    return mod_dfa
+
+
+
+

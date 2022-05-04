@@ -1,7 +1,7 @@
 # This is the second attempt at a parser, with more advanced features such as more set operations
 # and specific number of repeats for star
 
-from dfa import DFA, kleene_DFA, base_DFA, combine_DFA, concat_DFA
+from dfa import DFA, digify_DFA, kleene_DFA, base_DFA, combine_DFA, concat_DFA, modulo_DFA
 import copy
 
 class RegexpParser:
@@ -15,7 +15,7 @@ class RegexpParser:
         self.char_at = ""
         self.alphabet = []
         self.debug = False
-        self.key_symbols = {'(',')','[',']','~','-','|','^','','*'}
+        self.key_symbols = {'(',')','[',']','~','-','|','^','','*','&'}
         
     
     def consume_char(self):
@@ -84,6 +84,10 @@ class RegexpParser:
         ignore_next = False
         for char in self.string:
             if ignore_next:
+                if char == '0':
+                    self.alphabet.update({str(i) for i in range(10)})
+                if char == '1':
+                    self.alphabet.update({str(i+1) for i in range(9)})
                 ignore_next=False
                 continue
             if char in {str(i) for i in range(10)}:
@@ -418,67 +422,45 @@ def main():
     dfa = rexp.parse_string(reg)
     #dfa.print_info()
     
-    
+    dfa = digify_DFA(dfa)
+
+
     dfa.compute_dead_states()
     while len(input()) == 0:
         res = dfa.get_next_string(False)
         if res:
             if res != '<null_string>':
-                print(len(res),end = ', ')
+                print(res,end = ', ')
         else:
             break
 
 def test():
-    # A test to see if I can create a prime number generator using only regexp
+    # A test for the modulo DFA
 
-    # Create a regexp parser to do all the parsing
+    # Create a modulo dfa of 6
+    my_dfa = modulo_DFA(6)
+
+    # Turn states to final
+    my_dfa.set_state_target(1,True)
+    my_dfa.set_state_target(2,True)
+
+    # Add the fix for starting with zero
     parser = RegexpParser()
-    
-    # Create the bases
-    lang_base = parser.parse_string("a*")
-    lang_sub = parser.parse_string("(a^2)*")
-    automaton = combine_DFA(lang_base,lang_sub,'-')
+    my_dfa = combine_DFA(my_dfa,parser.parse_string("\\1\\0*"),'&')
 
-    # Primes so far
-    primes = [2]
-
-    # Setup the initial conditions
-    state_at = 0
-    num_at = 3
-    for i in range(2):
-        state_at = automaton.find_state(state_at,'a')[0]
-
-    # Setup the process
-    while True:
-        if num_at > 1000:
-            break
-        # If you have reached the last prime^2 add it to the automaton
-        if len(primes) > 0 and primes[0]**2 == num_at:
-            str_nxt = ""
-            for p in primes:
-                str_nxt += "(a^"+str(p)+")*|"
-            lang_sub = combine_DFA(lang_sub,parser.parse_string(str_nxt[:-1]),"|")
-            automaton = automaton = combine_DFA(lang_base,lang_sub,'-')
-            print(primes[0],'~',num_at,automaton.num_states)
-            primes = []
-            state_at = 0
-            for i in range(num_at):
-                state_at = automaton.find_state(state_at,'a')[0]
-            num_at += 1
-            continue
-
-        # Find the next target
-        state_at, is_target = automaton.find_state(state_at,'a')
-        if not is_target:
-            num_at += 1
-            
-            continue
+    # Check what it produces
+    while len(input()) == 0:
+        res = my_dfa.get_next_string(False)
+        if res:
+            if res != '<null_string>':
+                print(res,end = ', ')
         else:
-            print(num_at)
-            primes.append(num_at)
-            num_at += 1
-            continue
+            break
+
+
+    pass
 
 
 if __name__ == "__main__":
-    test()
+    main()
+    #test()

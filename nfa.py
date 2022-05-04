@@ -370,5 +370,4 @@ def base_NFA(string:str):
     # Return the newly created nfa
     return new_nfa
 
-
     
