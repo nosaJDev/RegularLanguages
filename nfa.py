@@ -1,5 +1,4 @@
 
-from dfa import DFA
 
 class NFA:
     # Representation of a NFA
@@ -191,6 +190,7 @@ class NFA:
                 
     def extract_dfa(self):
         
+        from dfa import DFA
         # This function will extract a DFA from this NFA
         # Make sure to call simplify first
         
@@ -209,7 +209,6 @@ class NFA:
         
         # I need to process all the states in that list
         start_state = tuple_from_states(self.instant_states(self.start_state))
-        print(start_state,'s')
         pending = [start_state]
         visited = set() # This will mark those that are already processed
         
@@ -260,7 +259,6 @@ class NFA:
 
         # Add all the edges that you found
         for state in dfa_states:
-            print(state)
             d_state = mapping[state]
             for char in dfa_states[state]:
                 mydfa.add_edge(d_state,mapping[dfa_states[state][char]],char)

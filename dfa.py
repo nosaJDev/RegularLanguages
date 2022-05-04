@@ -1,7 +1,7 @@
 
 import random
 import math
-from nfa import NFA, kleene_NFA, base_NFA
+from nfa import NFA, kleene_NFA, base_NFA, concat_NFA
 
 class DFA:
     # This is a representation of a DFA
@@ -23,11 +23,13 @@ class DFA:
         self.computed_dead_states = False
         self.computed_target_distance = False
         self.dead_states = set() # These are found separately
-        self.target_distance = {} # The distance each state has from a target state
+        self.target_distance = {} # The minimum distance each state has from a target state
+        self.target_max_length = float('inf') # The maximum distance the furthest state has from a target state
         
         # Edges are a dictionary of states, corresponding to a filled dictionary of the alphabet
         # that has the value of the next state
         # If one or more of the dictionaries is not yet filled, the DFA is invalid
+        self.num_edges = 0 # Take note of number of edges to know if you are complete
         self.edges = {0:{}}
         
         # Extra variables to calculate the next string on set
@@ -93,9 +95,18 @@ class DFA:
         if not char in self.alphabet:
             print("Tried to add an edge with invalid character")
             return
+        
+        # Check if it's a new edge
+        if char not in self.edges[ss]:
+            self.num_edges += 1
+
         # If the checks are correct, add the edge
         self.edges[ss][char] = se
-        
+    
+    def find_state(self,state_from, char):
+        st = self.edges[state_from][char]
+        return (st,st in self.target_states)
+
     def set_state_target(self,state, target):
         # Sets the target status of a state
         
@@ -114,6 +125,35 @@ class DFA:
         else:
             self.target_states.discard(state)
     
+    def is_complete(self):
+        # Returns whether the dfa has all the edges it needs to be complete
+        return self.num_edges == self.num_states*len(self.alphabet)
+
+    def make_complete(self):
+        # This will check if the dfa is complete, and if it isn't it will create or
+        # find a new dead state to place all the pending edges so that it will be complete
+
+        # Check incomplete
+        if self.is_complete():
+            return
+
+        # Find a dead state
+        if self.computed_dead_states == False:
+            self.compute_dead_states()
+
+        # Check if there are dead states
+        dead_state = -1
+        if len(self.dead_states) != 0:
+            dead_state = list(self.dead_states)[0]
+        else:
+            dead_state = self.add_state()
+
+        # Now that you have the dead state, add edges leading to it for all other incomplete states
+        for i in range(self.num_states):
+            for char in self.alphabet:
+                if char not in self.edges[i]:
+                    self.edges[i][char] = dead_state
+
     def negate(self):
         # Makes all the target states non-target, and all the non-target states target
         # Basically negates the dfa
@@ -180,6 +220,71 @@ class DFA:
                         if s not in self.target_distance or self.target_distance[s2]+1<self.target_distance[s]:
                             self.target_distance[s] = self.target_distance[s2]+1
 
+        # Then you can compute the maximum distance each state has from a target
+        # To do that we need a function that computes if a state is part of a circle first
+        def check_state_cycle(state):
+
+            # Which states have already been processed
+            looked_at = set()
+
+            # Which states are pending for processing 
+            pending = [state]
+
+            # Process them all
+            while True:
+
+                # If a circle is non found yet, there is none
+                if len(pending) == 0:
+                    return False
+
+                # Bring out the next pending state
+                state_at = pending.pop()
+                if state_at in looked_at:
+                    continue
+                looked_at.add(state_at)
+                    
+                # For that state, check every neighbor
+                for neighbor in self.edges[state_at].values():
+                    if neighbor == state:
+                        return True
+                    pending.append(neighbor)
+
+        # If a non dead state is part of a cycle, then the maximum distance from a target is infinite
+        self.target_max_length = -1
+        for i in range(self.num_states):
+            if i not in self.dead_states and check_state_cycle(i):
+                self.target_max_length = float('inf')
+        
+        # If there is no cycle in the valid paths, you just need to calculate the furthest path from the
+        # start state to one of the target states. For that, we need a dictionary for the maximum length
+        # from the start state
+        if self.target_max_length == -1:
+            distance_start = {}
+            pending = [(0,0)] # State, distance from start
+
+            while True:
+
+                # Check if you are done
+                if len(pending) == 0:
+                    break
+
+                # Get the next state
+                state_at, dist = pending.pop()
+                if state_at in distance_start and distance_start[state_at] <= dist:
+                    continue
+                distance_start[state_at] = dist
+
+                # See all the possible connections
+                for neighbor in self.edges[state_at].values():
+                    # Skip dead states
+                    if neighbor not in self.dead_states:
+                        pending.append((neighbor,dist+1))
+            
+            # Now you have all the distances you need, check the longest to a target state
+            for st in self.target_states:
+                if st in distance_start:
+                    self.target_max_length = max(self.target_max_length, distance_start[st])
+
         # Completed the computations
         self.computed_dead_states = True
         self.computed_target_distance = True
@@ -212,26 +317,29 @@ class DFA:
         # If you wish to reset, you must clear all the helper variables
         if reset:
             self.next_len = 0
-            self.next_in = 0
+            self.next_in = 1
             self.depth_list = []
             self.backtracked = False
-        if self.depth_list == []:
-            self.next_in = 1
-            self.depth_list.append((0,self.alphabet[0]))
+            
         
         # Special case for the null string
         if self.next_len == 0:
             self.next_len = 1
+            self.next_in = 1
+            self.depth_list.append((0,self.alphabet[0]))
             if 0 in self.target_states:
-                return '<null>'
+                return '<null_string>'
         
         # The next found string
         result = ""
         
         # Dive into the tree till you are next_in = next_len
         while True:
-            #print(self.depth_list)
-            
+
+            # Special case for when you are done
+            if self.target_max_length < self.next_len:
+                return None
+
             if len(self.depth_list) == 0:
                 self.depth_list.append((0,self.alphabet[0]))
                 self.next_len += 1
@@ -266,7 +374,7 @@ class DFA:
                 
                 # Don't forward to a dead state
                 all_dead = False
-                while self.target_distance[self.edges[frame[0]][frame[1]]] > self.next_len-self.next_in:
+                while self.target_distance[self.edges[frame[0]][frame[1]]] > self.next_len-self.next_in+1:
                     if frame[1] in self.ab_next:
                         frame = (frame[0],self.ab_next[frame[1]])
                         break
@@ -436,12 +544,17 @@ def combine_DFA(dfa1:DFA,dfa2:DFA,mode):
     # Combines two dfa's to create combinations
     # Mode determines which states are considered final in the combination
     # Different mode values produce &, |, - and other useful functions
-    
+
     # DFA's must have the same alphabet
     if dfa1.alphabet != dfa2.alphabet:
         print("Tried to combine dfa's with different alphabet")
         return
     alphabet = dfa1.alphabet.copy()
+
+    # The operation requires dfa's to be complete
+    for dfa in (dfa1,dfa2):
+        if not dfa.is_complete():
+            dfa.make_complete()
 
     # Create a list for the new states, and for the pending ones
     new_states = []
@@ -473,7 +586,7 @@ def combine_DFA(dfa1:DFA,dfa2:DFA,mode):
         for char in alphabet:
 
             # Find the new state for the character
-            state_next = (dfa1.edges[state_at[0][char]],dfa2.edges[state_at[1]][char])
+            state_next = (dfa1.edges[state_at[0]][char],dfa2.edges[state_at[1]][char])
 
             # Add it to the pending states
             pending.append(state_next)
@@ -517,10 +630,16 @@ def combine_DFA(dfa1:DFA,dfa2:DFA,mode):
     # Finally, return the new dfa
     return new_dfa
 
-def kleenee_DFA(dfa1:DFA):
+def concat_DFA(dfa1:DFA, dfa2:DFA):
+    return concat_NFA(dfa1.extract_nfa(),dfa2.extract_nfa()).extract_dfa()
+
+def kleene_DFA(dfa1:DFA):
     # Produces the kleene star of the given dfa
     return kleene_NFA(dfa1.extract_nfa()).extract_dfa()
 
-def base_DFA(string:str):
+def base_DFA(string:str, alphabet):
     # Makes a dfa that recognises a specific string
-    return base_NFA(string).extract_dfa()
+    res =  base_NFA(string).extract_dfa()
+    res.alphabet = alphabet
+    res.make_complete()
+    return res
